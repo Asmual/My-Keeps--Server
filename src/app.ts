@@ -2,6 +2,7 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import noteRoutes from './routes/noteRoutes';
 import userRoutes from './routes/userRoutes';
+import authRoutes from './routes/authRoutes';
 
 export const createApp = (): Application => {
   const app = express();
@@ -50,6 +51,7 @@ export const createApp = (): Application => {
   app.get('/health', healthCheck);
 
   // API Routes
+  app.use('/api/auth', authRoutes);
   app.use('/api/notes', noteRoutes);
   app.use('/api/user', userRoutes);
 

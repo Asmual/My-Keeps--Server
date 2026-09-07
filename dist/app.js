@@ -8,6 +8,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const noteRoutes_1 = __importDefault(require("./routes/noteRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
+const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const createApp = () => {
     const app = (0, express_1.default)();
     // CORS Middleware: Allow local dev, Vercel deployments, and configured CLIENT_URL
@@ -44,6 +45,7 @@ const createApp = () => {
     app.get('/', healthCheck);
     app.get('/health', healthCheck);
     // API Routes
+    app.use('/api/auth', authRoutes_1.default);
     app.use('/api/notes', noteRoutes_1.default);
     app.use('/api/user', userRoutes_1.default);
     // 404 Handler
