@@ -5,6 +5,7 @@ import {
   createNote,
   updateNote,
   deleteNote,
+  deleteNotes,
   emptyTrash,
 } from '../controllers/noteController';
 
@@ -12,7 +13,8 @@ const router = Router();
 
 router.route('/')
   .get(getNotes)
-  .post(createNote);
+  .post(createNote)
+  .delete(deleteNotes);
 
 router.delete('/trash/empty', emptyTrash);
 

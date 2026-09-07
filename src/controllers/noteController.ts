@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Note } from '../models/Note';
 
 // GET /api/notes
@@ -208,6 +209,57 @@ export const emptyTrash = async (req: Request, res: Response): Promise<void> => 
     res.status(500).json({
       success: false,
       message: 'Failed to empty trash',
+      error: (error as Error).message,
+    });
+  }
+};
+
+// DELETE /api/notes (Batch delete or empty trash via query params)
+export const deleteNotes = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { action, userId } = req.query;
+
+    if (action === 'empty-trash') {
+      const query: Record<string, unknown> = { isTrashed: true };
+      if (userId && typeof userId === 'string') {
+        query.userId = userId;
+      }
+      const result = await Note.deleteMany(query);
+      res.status(200).json({
+        success: true,
+        message: 'Trash emptied successfully',
+        deletedCount: result.deletedCount,
+      });
+      return;
+    }
+
+    const { ids } = req.body || {};
+    if (Array.isArray(ids) && ids.length > 0) {
+      const objectIds = ids
+        .filter((id) => mongoose.isValidObjectId(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      const query: Record<string, unknown> = {
+        $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }],
+      };
+      if (userId && typeof userId === 'string') {
+        query.userId = userId;
+      }
+
+      const result = await Note.deleteMany(query);
+      res.status(200).json({
+        success: true,
+        message: `${result.deletedCount} notes deleted`,
+        deletedCount: result.deletedCount,
+      });
+      return;
+    }
+
+    res.status(400).json({ success: false, message: 'Invalid delete request' });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete notes',
       error: (error as Error).message,
     });
   }

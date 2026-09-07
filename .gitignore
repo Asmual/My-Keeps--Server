@@ -7,7 +7,7 @@ node_modules/
 .env.*.local
 
 # Build output
-dist/
+# dist/ is tracked to ensure immediate deployment reliability on Render
 build/
 
 # Logs
