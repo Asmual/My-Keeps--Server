@@ -1,6 +1,7 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import noteRoutes from './routes/noteRoutes';
+import userRoutes from './routes/userRoutes';
 
 export const createApp = (): Application => {
   const app = express();
@@ -25,6 +26,7 @@ export const createApp = (): Application => {
 
   // API Routes
   app.use('/api/notes', noteRoutes);
+  app.use('/api/user', userRoutes);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

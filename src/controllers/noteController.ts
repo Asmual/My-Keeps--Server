@@ -4,15 +4,35 @@ import { Note } from '../models/Note';
 // GET /api/notes
 export const getNotes = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { filter, search, label } = req.query;
+    const { filter, search, label, userId } = req.query;
 
     const query: Record<string, unknown> = {};
+
+    if (userId && typeof userId === 'string') {
+      query.userId = userId;
+    }
 
     if (filter === 'archive') {
       query.isArchived = true;
       query.isTrashed = false;
     } else if (filter === 'trash') {
       query.isTrashed = true;
+    } else if (filter === 'checklist') {
+      query.isArchived = false;
+      query.isTrashed = false;
+      query.$or = [{ noteType: 'checklist' }, { 'checklist.0': { $exists: true } }];
+    } else if (filter === 'important') {
+      query.isArchived = false;
+      query.isTrashed = false;
+      query.isImportant = true;
+    } else if (filter === 'image') {
+      query.isArchived = false;
+      query.isTrashed = false;
+      query.$or = [{ noteType: 'image' }, { 'images.0': { $exists: true } }];
+    } else if (filter === 'voice') {
+      query.isArchived = false;
+      query.isTrashed = false;
+      query.$or = [{ noteType: 'voice' }, { audioUrl: { $ne: null } }];
     } else {
       query.isArchived = false;
       query.isTrashed = false;
@@ -30,7 +50,7 @@ export const getNotes = async (req: Request, res: Response): Promise<void> => {
       ];
     }
 
-    const notes = await Note.find(query).sort({ isPinned: -1, updatedAt: -1 });
+    const notes = await Note.find(query).sort({ isPinned: -1, isImportant: -1, updatedAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -70,18 +90,37 @@ export const getNoteById = async (req: Request, res: Response): Promise<void> =>
 // POST /api/notes
 export const createNote = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, content, color, isPinned, labels, checklist, reminder } = req.body;
+    const {
+      title,
+      content,
+      color,
+      isPinned,
+      isImportant,
+      isArchived,
+      labels,
+      checklist,
+      noteType,
+      images,
+      audioUrl,
+      reminder,
+      userId,
+    } = req.body;
 
     const note = await Note.create({
       title: title || '',
       content: content || '',
       color: color || 'default',
       isPinned: Boolean(isPinned),
-      isArchived: false,
+      isImportant: Boolean(isImportant),
+      isArchived: Boolean(isArchived),
       isTrashed: false,
       labels: labels || [],
       checklist: checklist || [],
+      noteType: noteType || 'text',
+      images: images || [],
+      audioUrl: audioUrl || null,
       reminder: reminder || null,
+      userId: userId || null,
     });
 
     res.status(201).json({
@@ -151,9 +190,14 @@ export const deleteNote = async (req: Request, res: Response): Promise<void> => 
 };
 
 // DELETE /api/notes/trash/empty
-export const emptyTrash = async (_req: Request, res: Response): Promise<void> => {
+export const emptyTrash = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await Note.deleteMany({ isTrashed: true });
+    const { userId } = req.query;
+    const query: Record<string, unknown> = { isTrashed: true };
+    if (userId && typeof userId === 'string') {
+      query.userId = userId;
+    }
+    const result = await Note.deleteMany(query);
 
     res.status(200).json({
       success: true,

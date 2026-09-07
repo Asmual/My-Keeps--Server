@@ -18,6 +18,7 @@ export interface INote extends Document {
   content: string;
   color: NoteColorId;
   isPinned: boolean;
+  isImportant: boolean;
   isArchived: boolean;
   isTrashed: boolean;
   labels: string[];
@@ -26,6 +27,9 @@ export interface INote extends Document {
     text: string;
     completed: boolean;
   }[];
+  noteType: 'text' | 'checklist' | 'image' | 'voice';
+  images: string[];
+  audioUrl?: string | null;
   reminder?: Date | null;
   userId?: mongoose.Types.ObjectId | string | null;
   createdAt: Date;
@@ -63,15 +67,34 @@ const NoteSchema = new Schema<INote>(
       ],
     },
     isPinned: { type: Boolean, default: false, index: true },
+    isImportant: { type: Boolean, default: false, index: true },
     isArchived: { type: Boolean, default: false, index: true },
     isTrashed: { type: Boolean, default: false, index: true },
     labels: [{ type: String, trim: true }],
     checklist: [CheckItemSchema],
+    noteType: {
+      type: String,
+      default: 'text',
+      enum: ['text', 'checklist', 'image', 'voice'],
+      index: true,
+    },
+    images: [{ type: String }],
+    audioUrl: { type: String, default: null },
     reminder: { type: Date, default: null },
     userId: { type: Schema.Types.Mixed, default: null, index: true },
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: Record<string, unknown>) => {
+        if (ret._id) {
+          ret.id = String(ret._id);
+        }
+        delete ret.__v;
+        return ret;
+      },
+    },
   }
 );
 
