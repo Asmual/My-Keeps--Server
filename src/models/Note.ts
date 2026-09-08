@@ -31,6 +31,8 @@ export interface INote extends Document {
   images: string[];
   audioUrl?: string | null;
   reminder?: Date | null;
+  isLocked: boolean;
+  password?: string | null;
   userId?: mongoose.Types.ObjectId | string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -81,6 +83,8 @@ const NoteSchema = new Schema<INote>(
     images: [{ type: String }],
     audioUrl: { type: String, default: null },
     reminder: { type: Date, default: null },
+    isLocked: { type: Boolean, default: false, index: true },
+    password: { type: String, default: null },
     userId: { type: Schema.Types.Mixed, default: null, index: true },
   },
   {
@@ -92,6 +96,7 @@ const NoteSchema = new Schema<INote>(
           ret.id = String(ret._id);
         }
         delete ret.__v;
+        delete ret.password;
         return ret;
       },
     },

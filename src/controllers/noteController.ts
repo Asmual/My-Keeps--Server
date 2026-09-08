@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Note } from '../models/Note';
+import { hashNotePassword, verifyNotePassword } from '../utils/security';
 
 // GET /api/notes
 export const getNotes = async (req: Request, res: Response): Promise<void> => {
@@ -53,10 +54,21 @@ export const getNotes = async (req: Request, res: Response): Promise<void> => {
 
     const notes = await Note.find(query).sort({ isPinned: -1, isImportant: -1, updatedAt: -1 });
 
+    const sanitizedNotes = notes.map((note) => {
+      const obj = note.toJSON();
+      if (obj.isLocked) {
+        obj.content = '';
+        obj.images = [];
+        obj.checklist = [];
+        obj.audioUrl = null;
+      }
+      return obj;
+    });
+
     res.status(200).json({
       success: true,
-      count: notes.length,
-      data: notes,
+      count: sanitizedNotes.length,
+      data: sanitizedNotes,
     });
   } catch (error) {
     res.status(500).json({
@@ -78,7 +90,15 @@ export const getNoteById = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    res.status(200).json({ success: true, data: note });
+    const obj = note.toJSON();
+    if (obj.isLocked) {
+      obj.content = '';
+      obj.images = [];
+      obj.checklist = [];
+      obj.audioUrl = null;
+    }
+
+    res.status(200).json({ success: true, data: obj });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -264,3 +284,118 @@ export const deleteNotes = async (req: Request, res: Response): Promise<void> =>
     });
   }
 };
+
+// POST /api/notes/:id/lock
+export const lockNote = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    if (!password || typeof password !== 'string' || password.trim().length === 0) {
+      res.status(400).json({ success: false, message: 'Password is required to lock note' });
+      return;
+    }
+
+    const note = await Note.findById(id);
+    if (!note) {
+      res.status(404).json({ success: false, message: 'Note not found' });
+      return;
+    }
+
+    note.isLocked = true;
+    note.password = hashNotePassword(password.trim());
+    await note.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Note locked successfully',
+      data: { id: note.id, isLocked: true },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to lock note',
+      error: (error as Error).message,
+    });
+  }
+};
+
+// POST /api/notes/:id/unlock
+export const unlockNote = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    const note = await Note.findById(id);
+    if (!note) {
+      res.status(404).json({ success: false, message: 'Note not found' });
+      return;
+    }
+
+    if (!note.isLocked) {
+      res.status(200).json({
+        success: true,
+        message: 'Note is not locked',
+        data: note.toJSON(),
+      });
+      return;
+    }
+
+    if (!password || !note.password || !verifyNotePassword(password.trim(), note.password)) {
+      res.status(401).json({ success: false, message: 'Incorrect password' });
+      return;
+    }
+
+    // Password matches! Return full unmasked note
+    const obj = note.toJSON();
+    res.status(200).json({
+      success: true,
+      message: 'Note unlocked successfully',
+      data: obj,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to unlock note',
+      error: (error as Error).message,
+    });
+  }
+};
+
+// POST /api/notes/:id/remove-lock
+export const removeLock = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+
+    const note = await Note.findById(id);
+    if (!note) {
+      res.status(404).json({ success: false, message: 'Note not found' });
+      return;
+    }
+
+    if (note.isLocked && note.password) {
+      if (!password || !verifyNotePassword(password.trim(), note.password)) {
+        res.status(401).json({ success: false, message: 'Incorrect password' });
+        return;
+      }
+    }
+
+    note.isLocked = false;
+    note.password = null;
+    await note.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Note lock removed successfully',
+      data: note.toJSON(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove note lock',
+      error: (error as Error).message,
+    });
+  }
+};
+

@@ -7,6 +7,9 @@ import {
   deleteNote,
   deleteNotes,
   emptyTrash,
+  lockNote,
+  unlockNote,
+  removeLock,
 } from '../controllers/noteController';
 
 const router = Router();
@@ -17,6 +20,10 @@ router.route('/')
   .delete(deleteNotes);
 
 router.delete('/trash/empty', emptyTrash);
+
+router.post('/:id/lock', lockNote);
+router.post('/:id/unlock', unlockNote);
+router.post('/:id/remove-lock', removeLock);
 
 router.route('/:id')
   .get(getNoteById)

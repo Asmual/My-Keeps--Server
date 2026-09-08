@@ -8,6 +8,9 @@ router.route('/')
     .post(noteController_1.createNote)
     .delete(noteController_1.deleteNotes);
 router.delete('/trash/empty', noteController_1.emptyTrash);
+router.post('/:id/lock', noteController_1.lockNote);
+router.post('/:id/unlock', noteController_1.unlockNote);
+router.post('/:id/remove-lock', noteController_1.removeLock);
 router.route('/:id')
     .get(noteController_1.getNoteById)
     .patch(noteController_1.updateNote)

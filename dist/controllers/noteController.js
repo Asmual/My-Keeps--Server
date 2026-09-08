@@ -3,9 +3,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteNotes = exports.emptyTrash = exports.deleteNote = exports.updateNote = exports.createNote = exports.getNoteById = exports.getNotes = void 0;
+exports.removeLock = exports.unlockNote = exports.lockNote = exports.deleteNotes = exports.emptyTrash = exports.deleteNote = exports.updateNote = exports.createNote = exports.getNoteById = exports.getNotes = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Note_1 = require("../models/Note");
+const security_1 = require("../utils/security");
 // GET /api/notes
 const getNotes = async (req, res) => {
     try {
@@ -56,10 +57,20 @@ const getNotes = async (req, res) => {
             ];
         }
         const notes = await Note_1.Note.find(query).sort({ isPinned: -1, isImportant: -1, updatedAt: -1 });
+        const sanitizedNotes = notes.map((note) => {
+            const obj = note.toJSON();
+            if (obj.isLocked) {
+                obj.content = '';
+                obj.images = [];
+                obj.checklist = [];
+                obj.audioUrl = null;
+            }
+            return obj;
+        });
         res.status(200).json({
             success: true,
-            count: notes.length,
-            data: notes,
+            count: sanitizedNotes.length,
+            data: sanitizedNotes,
         });
     }
     catch (error) {
@@ -80,7 +91,14 @@ const getNoteById = async (req, res) => {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
         }
-        res.status(200).json({ success: true, data: note });
+        const obj = note.toJSON();
+        if (obj.isLocked) {
+            obj.content = '';
+            obj.images = [];
+            obj.checklist = [];
+            obj.audioUrl = null;
+        }
+        res.status(200).json({ success: true, data: obj });
     }
     catch (error) {
         res.status(500).json({
@@ -247,3 +265,108 @@ const deleteNotes = async (req, res) => {
     }
 };
 exports.deleteNotes = deleteNotes;
+// POST /api/notes/:id/lock
+const lockNote = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        if (!password || typeof password !== 'string' || password.trim().length === 0) {
+            res.status(400).json({ success: false, message: 'Password is required to lock note' });
+            return;
+        }
+        const note = await Note_1.Note.findById(id);
+        if (!note) {
+            res.status(404).json({ success: false, message: 'Note not found' });
+            return;
+        }
+        note.isLocked = true;
+        note.password = (0, security_1.hashNotePassword)(password.trim());
+        await note.save();
+        res.status(200).json({
+            success: true,
+            message: 'Note locked successfully',
+            data: { id: note.id, isLocked: true },
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to lock note',
+            error: error.message,
+        });
+    }
+};
+exports.lockNote = lockNote;
+// POST /api/notes/:id/unlock
+const unlockNote = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        const note = await Note_1.Note.findById(id);
+        if (!note) {
+            res.status(404).json({ success: false, message: 'Note not found' });
+            return;
+        }
+        if (!note.isLocked) {
+            res.status(200).json({
+                success: true,
+                message: 'Note is not locked',
+                data: note.toJSON(),
+            });
+            return;
+        }
+        if (!password || !note.password || !(0, security_1.verifyNotePassword)(password.trim(), note.password)) {
+            res.status(401).json({ success: false, message: 'Incorrect password' });
+            return;
+        }
+        // Password matches! Return full unmasked note
+        const obj = note.toJSON();
+        res.status(200).json({
+            success: true,
+            message: 'Note unlocked successfully',
+            data: obj,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to unlock note',
+            error: error.message,
+        });
+    }
+};
+exports.unlockNote = unlockNote;
+// POST /api/notes/:id/remove-lock
+const removeLock = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        const note = await Note_1.Note.findById(id);
+        if (!note) {
+            res.status(404).json({ success: false, message: 'Note not found' });
+            return;
+        }
+        if (note.isLocked && note.password) {
+            if (!password || !(0, security_1.verifyNotePassword)(password.trim(), note.password)) {
+                res.status(401).json({ success: false, message: 'Incorrect password' });
+                return;
+            }
+        }
+        note.isLocked = false;
+        note.password = null;
+        await note.save();
+        res.status(200).json({
+            success: true,
+            message: 'Note lock removed successfully',
+            data: note.toJSON(),
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Failed to remove note lock',
+            error: error.message,
+        });
+    }
+};
+exports.removeLock = removeLock;

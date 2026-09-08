@@ -75,6 +75,8 @@ const NoteSchema = new mongoose_1.Schema({
     images: [{ type: String }],
     audioUrl: { type: String, default: null },
     reminder: { type: Date, default: null },
+    isLocked: { type: Boolean, default: false, index: true },
+    password: { type: String, default: null },
     userId: { type: mongoose_1.Schema.Types.Mixed, default: null, index: true },
 }, {
     timestamps: true,
@@ -85,6 +87,7 @@ const NoteSchema = new mongoose_1.Schema({
                 ret.id = String(ret._id);
             }
             delete ret.__v;
+            delete ret.password;
             return ret;
         },
     },
