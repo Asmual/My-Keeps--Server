@@ -112,7 +112,13 @@ exports.getNoteById = getNoteById;
 // POST /api/notes
 const createNote = async (req, res) => {
     try {
-        const { title, content, color, isPinned, isImportant, isArchived, labels, checklist, noteType, images, audioUrl, reminder, userId, } = req.body;
+        const { title, content, color, isPinned, isImportant, isArchived, labels, checklist, noteType, images, audioUrl, reminder, userId, isLocked, password, } = req.body;
+        let locked = Boolean(isLocked);
+        let passwordHash = null;
+        if (password && typeof password === 'string' && password.trim().length > 0) {
+            locked = true;
+            passwordHash = (0, security_1.hashNotePassword)(password.trim());
+        }
         const note = await Note_1.Note.create({
             title: title || '',
             content: content || '',
@@ -128,11 +134,20 @@ const createNote = async (req, res) => {
             audioUrl: audioUrl || null,
             reminder: reminder || null,
             userId: userId || null,
+            isLocked: locked,
+            password: passwordHash,
         });
+        const obj = note.toJSON();
+        if (obj.isLocked) {
+            obj.content = '';
+            obj.images = [];
+            obj.checklist = [];
+            obj.audioUrl = null;
+        }
         res.status(201).json({
             success: true,
             message: 'Note created successfully',
-            data: note,
+            data: obj,
         });
     }
     catch (error) {
@@ -148,7 +163,15 @@ exports.createNote = createNote;
 const updateNote = async (req, res) => {
     try {
         const { id } = req.params;
-        const updatedNote = await Note_1.Note.findByIdAndUpdate(id, req.body, {
+        const updateData = { ...req.body };
+        if (updateData.password && typeof updateData.password === 'string' && updateData.password.trim().length > 0) {
+            updateData.password = (0, security_1.hashNotePassword)(updateData.password.trim());
+            updateData.isLocked = true;
+        }
+        else if (updateData.isLocked === false) {
+            updateData.password = null;
+        }
+        const updatedNote = await Note_1.Note.findByIdAndUpdate(id, updateData, {
             new: true,
             runValidators: true,
         });
@@ -156,10 +179,17 @@ const updateNote = async (req, res) => {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
         }
+        const obj = updatedNote.toJSON();
+        if (obj.isLocked) {
+            obj.content = '';
+            obj.images = [];
+            obj.checklist = [];
+            obj.audioUrl = null;
+        }
         res.status(200).json({
             success: true,
             message: 'Note updated successfully',
-            data: updatedNote,
+            data: obj,
         });
     }
     catch (error) {

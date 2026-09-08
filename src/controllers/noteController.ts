@@ -125,7 +125,16 @@ export const createNote = async (req: Request, res: Response): Promise<void> => 
       audioUrl,
       reminder,
       userId,
+      isLocked,
+      password,
     } = req.body;
+
+    let locked = Boolean(isLocked);
+    let passwordHash: string | null = null;
+    if (password && typeof password === 'string' && password.trim().length > 0) {
+      locked = true;
+      passwordHash = hashNotePassword(password.trim());
+    }
 
     const note = await Note.create({
       title: title || '',
@@ -142,12 +151,22 @@ export const createNote = async (req: Request, res: Response): Promise<void> => 
       audioUrl: audioUrl || null,
       reminder: reminder || null,
       userId: userId || null,
+      isLocked: locked,
+      password: passwordHash,
     });
+
+    const obj = note.toJSON();
+    if (obj.isLocked) {
+      obj.content = '';
+      obj.images = [];
+      obj.checklist = [];
+      obj.audioUrl = null;
+    }
 
     res.status(201).json({
       success: true,
       message: 'Note created successfully',
-      data: note,
+      data: obj,
     });
   } catch (error) {
     res.status(500).json({
@@ -162,7 +181,16 @@ export const createNote = async (req: Request, res: Response): Promise<void> => 
 export const updateNote = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const updatedNote = await Note.findByIdAndUpdate(id, req.body, {
+    const updateData = { ...req.body };
+
+    if (updateData.password && typeof updateData.password === 'string' && updateData.password.trim().length > 0) {
+      updateData.password = hashNotePassword(updateData.password.trim());
+      updateData.isLocked = true;
+    } else if (updateData.isLocked === false) {
+      updateData.password = null;
+    }
+
+    const updatedNote = await Note.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     });
@@ -172,10 +200,18 @@ export const updateNote = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    const obj = updatedNote.toJSON();
+    if (obj.isLocked) {
+      obj.content = '';
+      obj.images = [];
+      obj.checklist = [];
+      obj.audioUrl = null;
+    }
+
     res.status(200).json({
       success: true,
       message: 'Note updated successfully',
-      data: updatedNote,
+      data: obj,
     });
   } catch (error) {
     res.status(500).json({
