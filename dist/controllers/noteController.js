@@ -164,15 +164,11 @@ const updateNote = async (req, res) => {
     try {
         const { id } = req.params;
         const updateData = { ...req.body };
-        if (updateData.password && typeof updateData.password === 'string' && updateData.password.trim().length > 0) {
-            updateData.password = (0, security_1.hashNotePassword)(updateData.password.trim());
-            updateData.isLocked = true;
-        }
-        else if (updateData.isLocked === false) {
-            updateData.password = null;
-        }
+        // Lock and password are managed exclusively via dedicated lock/unlock endpoints
+        delete updateData.password;
+        delete updateData.isLocked;
         const updatedNote = await Note_1.Note.findByIdAndUpdate(id, updateData, {
-            new: true,
+            returnDocument: 'after',
             runValidators: true,
         });
         if (!updatedNote) {
@@ -300,22 +296,24 @@ const lockNote = async (req, res) => {
     try {
         const { id } = req.params;
         const { password } = req.body;
-        if (!password || typeof password !== 'string' || password.trim().length === 0) {
-            res.status(400).json({ success: false, message: 'Password is required to lock note' });
+        if (!password || typeof password !== 'string' || password.trim().length < 4) {
+            res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
             return;
         }
-        const note = await Note_1.Note.findById(id);
-        if (!note) {
+        const updated = await Note_1.Note.findByIdAndUpdate(id, {
+            $set: {
+                isLocked: true,
+                password: (0, security_1.hashNotePassword)(password.trim()),
+            },
+        }, { returnDocument: 'after' });
+        if (!updated) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
         }
-        note.isLocked = true;
-        note.password = (0, security_1.hashNotePassword)(password.trim());
-        await note.save();
         res.status(200).json({
             success: true,
             message: 'Note locked successfully',
-            data: { id: note.id, isLocked: true },
+            data: { id: updated.id, isLocked: true },
         });
     }
     catch (error) {
@@ -382,13 +380,16 @@ const removeLock = async (req, res) => {
                 return;
             }
         }
-        note.isLocked = false;
-        note.password = null;
-        await note.save();
+        const updated = await Note_1.Note.findByIdAndUpdate(id, {
+            $set: {
+                isLocked: false,
+                password: null,
+            },
+        }, { returnDocument: 'after' });
         res.status(200).json({
             success: true,
             message: 'Note lock removed successfully',
-            data: note.toJSON(),
+            data: updated?.toJSON(),
         });
     }
     catch (error) {
