@@ -11,10 +11,18 @@ const security_1 = require("../utils/security");
 const getNotes = async (req, res) => {
     try {
         const { filter, search, label, userId } = req.query;
-        const query = {};
-        if (userId && typeof userId === 'string') {
-            query.userId = userId;
+        // Strict multi-tenant isolation: If no userId is provided, return empty array immediately
+        if (!userId || typeof userId !== 'string' || !userId.trim()) {
+            res.status(200).json({
+                success: true,
+                count: 0,
+                data: [],
+            });
+            return;
         }
+        const query = {
+            userId: userId.trim(),
+        };
         if (filter === 'archive') {
             query.isArchived = true;
             query.isTrashed = false;
@@ -86,7 +94,12 @@ exports.getNotes = getNotes;
 const getNoteById = async (req, res) => {
     try {
         const { id } = req.params;
-        const note = await Note_1.Note.findById(id);
+        const { userId } = req.query;
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const note = await Note_1.Note.findOne(filterQuery);
         if (!note) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
@@ -113,9 +126,16 @@ exports.getNoteById = getNoteById;
 const createNote = async (req, res) => {
     try {
         const { title, content, color, isPinned, isImportant, isArchived, labels, checklist, noteType, images, audioUrl, reminder, userId, isLocked, password, } = req.body;
+        if (!userId || typeof userId !== 'string' || !userId.trim()) {
+            res.status(401).json({
+                success: false,
+                message: 'Authentication required. Please sign in to create notes.',
+            });
+            return;
+        }
         let locked = Boolean(isLocked);
         let passwordHash = null;
-        if (password && typeof password === 'string' && password.trim().length > 0) {
+        if (password && typeof password === 'string' && password.trim().length >= 4) {
             locked = true;
             passwordHash = (0, security_1.hashNotePassword)(password.trim());
         }
@@ -133,7 +153,7 @@ const createNote = async (req, res) => {
             images: images || [],
             audioUrl: audioUrl || null,
             reminder: reminder || null,
-            userId: userId || null,
+            userId: userId.trim(),
             isLocked: locked,
             password: passwordHash,
         });
@@ -163,11 +183,17 @@ exports.createNote = createNote;
 const updateNote = async (req, res) => {
     try {
         const { id } = req.params;
+        const { userId } = req.body;
         const updateData = { ...req.body };
         // Lock and password are managed exclusively via dedicated lock/unlock endpoints
         delete updateData.password;
         delete updateData.isLocked;
-        const updatedNote = await Note_1.Note.findByIdAndUpdate(id, updateData, {
+        delete updateData.userId;
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const updatedNote = await Note_1.Note.findOneAndUpdate(filterQuery, updateData, {
             returnDocument: 'after',
             runValidators: true,
         });
@@ -201,7 +227,12 @@ exports.updateNote = updateNote;
 const deleteNote = async (req, res) => {
     try {
         const { id } = req.params;
-        const note = await Note_1.Note.findByIdAndDelete(id);
+        const { userId } = req.query;
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const note = await Note_1.Note.findOneAndDelete(filterQuery);
         if (!note) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
@@ -224,10 +255,11 @@ exports.deleteNote = deleteNote;
 const emptyTrash = async (req, res) => {
     try {
         const { userId } = req.query;
-        const query = { isTrashed: true };
-        if (userId && typeof userId === 'string') {
-            query.userId = userId;
+        if (!userId || typeof userId !== 'string' || !userId.trim()) {
+            res.status(401).json({ success: false, message: 'Authentication required' });
+            return;
         }
+        const query = { isTrashed: true, userId: userId.trim() };
         const result = await Note_1.Note.deleteMany(query);
         res.status(200).json({
             success: true,
@@ -248,11 +280,12 @@ exports.emptyTrash = emptyTrash;
 const deleteNotes = async (req, res) => {
     try {
         const { action, userId } = req.query;
+        if (!userId || typeof userId !== 'string' || !userId.trim()) {
+            res.status(401).json({ success: false, message: 'Authentication required' });
+            return;
+        }
         if (action === 'empty-trash') {
-            const query = { isTrashed: true };
-            if (userId && typeof userId === 'string') {
-                query.userId = userId;
-            }
+            const query = { isTrashed: true, userId: userId.trim() };
             const result = await Note_1.Note.deleteMany(query);
             res.status(200).json({
                 success: true,
@@ -268,10 +301,8 @@ const deleteNotes = async (req, res) => {
                 .map((id) => new mongoose_1.default.Types.ObjectId(id));
             const query = {
                 $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }],
+                userId: userId.trim(),
             };
-            if (userId && typeof userId === 'string') {
-                query.userId = userId;
-            }
             const result = await Note_1.Note.deleteMany(query);
             res.status(200).json({
                 success: true,
@@ -295,12 +326,16 @@ exports.deleteNotes = deleteNotes;
 const lockNote = async (req, res) => {
     try {
         const { id } = req.params;
-        const { password } = req.body;
+        const { password, userId } = req.body;
         if (!password || typeof password !== 'string' || password.trim().length < 4) {
             res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
             return;
         }
-        const updated = await Note_1.Note.findByIdAndUpdate(id, {
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const updated = await Note_1.Note.findOneAndUpdate(filterQuery, {
             $set: {
                 isLocked: true,
                 password: (0, security_1.hashNotePassword)(password.trim()),
@@ -329,8 +364,12 @@ exports.lockNote = lockNote;
 const unlockNote = async (req, res) => {
     try {
         const { id } = req.params;
-        const { password } = req.body;
-        const note = await Note_1.Note.findById(id);
+        const { password, userId } = req.body;
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const note = await Note_1.Note.findOne(filterQuery);
         if (!note) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
@@ -368,8 +407,12 @@ exports.unlockNote = unlockNote;
 const removeLock = async (req, res) => {
     try {
         const { id } = req.params;
-        const { password } = req.body;
-        const note = await Note_1.Note.findById(id);
+        const { password, userId } = req.body;
+        const filterQuery = { _id: id };
+        if (userId && typeof userId === 'string') {
+            filterQuery.userId = userId.trim();
+        }
+        const note = await Note_1.Note.findOne(filterQuery);
         if (!note) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
@@ -380,7 +423,7 @@ const removeLock = async (req, res) => {
                 return;
             }
         }
-        const updated = await Note_1.Note.findByIdAndUpdate(id, {
+        const updated = await Note_1.Note.findOneAndUpdate(filterQuery, {
             $set: {
                 isLocked: false,
                 password: null,
