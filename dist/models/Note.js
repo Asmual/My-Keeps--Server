@@ -75,6 +75,7 @@ const NoteSchema = new mongoose_1.Schema({
     images: [{ type: String }],
     audioUrl: { type: String, default: null },
     reminder: { type: Date, default: null },
+    reminderSent: { type: Boolean, default: false, index: true },
     isLocked: { type: Boolean, default: false, index: true },
     password: { type: String, default: null },
     unlockedUntil: { type: Date, default: null, index: true },

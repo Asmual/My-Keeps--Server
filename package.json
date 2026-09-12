@@ -4,11 +4,11 @@
   "description": "",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node api.js && tsx watch src/server.ts",
     "build": "tsc",
     "postinstall": "npm run build",
     "prestart": "npm run build",
-    "start": "node dist/server.js"
+    "start": "node api.js && node dist/server.js"
   },
   "keywords": [],
   "type": "commonjs",
@@ -18,12 +18,16 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.4.1",
+    "@types/nodemailer": "^8.0.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.5",
+    "node-fetch": "^3.3.2",
+    "nodemailer": "^10.0.9",
+    "resend": "^6.28.0",
     "typescript": "^7.0.2"
   },
   "devDependencies": {

@@ -31,6 +31,7 @@ export interface INote extends Document {
   images: string[];
   audioUrl?: string | null;
   reminder?: Date | null;
+  reminderSent?: boolean;
   isLocked: boolean;
   password?: string | null;
   unlockedUntil?: Date | null;
@@ -84,6 +85,7 @@ const NoteSchema = new Schema<INote>(
     images: [{ type: String }],
     audioUrl: { type: String, default: null },
     reminder: { type: Date, default: null },
+    reminderSent: { type: Boolean, default: false, index: true },
     isLocked: { type: Boolean, default: false, index: true },
     password: { type: String, default: null },
     unlockedUntil: { type: Date, default: null, index: true },
