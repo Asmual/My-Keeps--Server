@@ -206,6 +206,7 @@ export const createNote = async (req: Request, res: Response): Promise<void> => 
       images: images || [],
       audioUrl: audioUrl || null,
       reminder: reminder ? new Date(reminder) : null,
+      reminderSent: false,
       userId: userId.trim(),
       isLocked: locked,
       password: passwordHash,
@@ -248,6 +249,7 @@ export const updateNote = async (req: Request, res: Response): Promise<void> => 
 
     if (updateData.reminder !== undefined) {
       updateData.reminder = updateData.reminder ? new Date(updateData.reminder) : null;
+      updateData.reminderSent = false;
     }
 
     const filterQuery: Record<string, unknown> = { _id: id };

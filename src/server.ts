@@ -4,6 +4,7 @@ dotenv.config();
 
 import { createApp } from './app';
 import { connectDB } from './config/db';
+import { startReminderScheduler, stopReminderScheduler } from './services/reminderScheduler';
 
 const startServer = async () => {
   const PORT = process.env.PORT || 5000;
@@ -11,10 +12,13 @@ const startServer = async () => {
   // 1. Connect to MongoDB
   await connectDB();
 
-  // 2. Initialize Express application
+  // 2. Start background email reminder scheduler
+  startReminderScheduler();
+
+  // 3. Initialize Express application
   const app = createApp();
 
-  // 3. Start listening
+  // 4. Start listening
   const server = app.listen(PORT, () => {
     console.log(`🚀 My Keeps Server is listening on http://localhost:${PORT}`);
     console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -23,6 +27,7 @@ const startServer = async () => {
   // Graceful shutdown
   const shutdown = () => {
     console.log('\n🛑 Shutting down server gracefully...');
+    stopReminderScheduler();
     server.close(() => {
       console.log('✅ Server closed.');
       process.exit(0);

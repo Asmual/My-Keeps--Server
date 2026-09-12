@@ -181,6 +181,7 @@ const createNote = async (req, res) => {
             images: images || [],
             audioUrl: audioUrl || null,
             reminder: reminder ? new Date(reminder) : null,
+            reminderSent: false,
             userId: userId.trim(),
             isLocked: locked,
             password: passwordHash,
@@ -220,6 +221,7 @@ const updateNote = async (req, res) => {
         delete updateData.userId;
         if (updateData.reminder !== undefined) {
             updateData.reminder = updateData.reminder ? new Date(updateData.reminder) : null;
+            updateData.reminderSent = false;
         }
         const filterQuery = { _id: id };
         if (userId && typeof userId === 'string') {
