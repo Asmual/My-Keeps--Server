@@ -217,6 +217,24 @@ const updateNote = async (req, res) => {
         if (userId && typeof userId === 'string') {
             filterQuery.userId = userId.trim();
         }
+        // If attempting to move note to trash, verify password if note is locked
+        if (req.body.isTrashed === true) {
+            const existing = await Note_1.Note.findOne(filterQuery);
+            if (!existing) {
+                res.status(404).json({ success: false, message: 'Note not found' });
+                return;
+            }
+            if (existing.isLocked && existing.password) {
+                const providedPassword = req.body.password;
+                if (!providedPassword || !(0, security_1.verifyNotePassword)(String(providedPassword).trim(), existing.password)) {
+                    res.status(403).json({
+                        success: false,
+                        message: 'Password required to delete a locked note',
+                    });
+                    return;
+                }
+            }
+        }
         const updatedNote = await Note_1.Note.findOneAndUpdate(filterQuery, updateData, {
             returnDocument: 'after',
             runValidators: true,
@@ -266,11 +284,23 @@ const deleteNote = async (req, res) => {
         if (userId && typeof userId === 'string') {
             filterQuery.userId = userId.trim();
         }
-        const note = await Note_1.Note.findOneAndDelete(filterQuery);
+        const note = await Note_1.Note.findOne(filterQuery);
         if (!note) {
             res.status(404).json({ success: false, message: 'Note not found' });
             return;
         }
+        // Require password if note is locked
+        if (note.isLocked && note.password) {
+            const providedPassword = req.body?.password || req.query?.password;
+            if (!providedPassword || !(0, security_1.verifyNotePassword)(String(providedPassword).trim(), note.password)) {
+                res.status(403).json({
+                    success: false,
+                    message: 'Password required to delete a locked note',
+                });
+                return;
+            }
+        }
+        await Note_1.Note.deleteOne(filterQuery);
         res.status(200).json({
             success: true,
             message: 'Note permanently deleted',
@@ -293,11 +323,16 @@ const emptyTrash = async (req, res) => {
             res.status(401).json({ success: false, message: 'Authentication required' });
             return;
         }
-        const query = { isTrashed: true, userId: userId.trim() };
+        // Locked notes in trash are preserved from bulk emptying
+        const query = {
+            isTrashed: true,
+            userId: userId.trim(),
+            isLocked: { $ne: true },
+        };
         const result = await Note_1.Note.deleteMany(query);
         res.status(200).json({
             success: true,
-            message: 'Trash emptied successfully',
+            message: 'Trash emptied successfully (locked notes preserved)',
             deletedCount: result.deletedCount,
         });
     }
@@ -319,11 +354,15 @@ const deleteNotes = async (req, res) => {
             return;
         }
         if (action === 'empty-trash') {
-            const query = { isTrashed: true, userId: userId.trim() };
+            const query = {
+                isTrashed: true,
+                userId: userId.trim(),
+                isLocked: { $ne: true },
+            };
             const result = await Note_1.Note.deleteMany(query);
             res.status(200).json({
                 success: true,
-                message: 'Trash emptied successfully',
+                message: 'Trash emptied successfully (locked notes preserved)',
                 deletedCount: result.deletedCount,
             });
             return;
@@ -336,6 +375,7 @@ const deleteNotes = async (req, res) => {
             const query = {
                 $or: [{ _id: { $in: objectIds } }, { id: { $in: ids } }],
                 userId: userId.trim(),
+                isLocked: { $ne: true }, // Protect locked notes from batch delete
             };
             const result = await Note_1.Note.deleteMany(query);
             res.status(200).json({
