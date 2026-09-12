@@ -67,13 +67,23 @@ const getNotes = async (req, res) => {
         const notes = await Note_1.Note.find(query).sort({ isPinned: -1, isImportant: -1, updatedAt: -1 });
         const sanitizedNotes = notes.map((note) => {
             const obj = note.toJSON();
-            if (obj.isLocked) {
+            const hasPassword = Boolean(obj.isLocked);
+            const isTemporarilyUnlocked = Boolean(hasPassword &&
+                obj.unlockedUntil &&
+                new Date(obj.unlockedUntil).getTime() > Date.now());
+            const isEffectivelyLocked = hasPassword && !isTemporarilyUnlocked;
+            if (isEffectivelyLocked) {
                 obj.content = '';
                 obj.images = [];
                 obj.checklist = [];
                 obj.audioUrl = null;
             }
-            return obj;
+            return {
+                ...obj,
+                isLocked: hasPassword,
+                isUnlocked: isTemporarilyUnlocked,
+                unlockedUntil: obj.unlockedUntil ? new Date(obj.unlockedUntil).toISOString() : null,
+            };
         });
         res.status(200).json({
             success: true,
@@ -105,13 +115,26 @@ const getNoteById = async (req, res) => {
             return;
         }
         const obj = note.toJSON();
-        if (obj.isLocked) {
+        const hasPassword = Boolean(obj.isLocked);
+        const isTemporarilyUnlocked = Boolean(hasPassword &&
+            obj.unlockedUntil &&
+            new Date(obj.unlockedUntil).getTime() > Date.now());
+        const isEffectivelyLocked = hasPassword && !isTemporarilyUnlocked;
+        if (isEffectivelyLocked) {
             obj.content = '';
             obj.images = [];
             obj.checklist = [];
             obj.audioUrl = null;
         }
-        res.status(200).json({ success: true, data: obj });
+        res.status(200).json({
+            success: true,
+            data: {
+                ...obj,
+                isLocked: hasPassword,
+                isUnlocked: isTemporarilyUnlocked,
+                unlockedUntil: obj.unlockedUntil ? new Date(obj.unlockedUntil).toISOString() : null,
+            },
+        });
     }
     catch (error) {
         res.status(500).json({
@@ -188,6 +211,7 @@ const updateNote = async (req, res) => {
         // Lock and password are managed exclusively via dedicated lock/unlock endpoints
         delete updateData.password;
         delete updateData.isLocked;
+        delete updateData.unlockedUntil;
         delete updateData.userId;
         const filterQuery = { _id: id };
         if (userId && typeof userId === 'string') {
@@ -202,7 +226,12 @@ const updateNote = async (req, res) => {
             return;
         }
         const obj = updatedNote.toJSON();
-        if (obj.isLocked) {
+        const hasPassword = Boolean(obj.isLocked);
+        const isTemporarilyUnlocked = Boolean(hasPassword &&
+            obj.unlockedUntil &&
+            new Date(obj.unlockedUntil).getTime() > Date.now());
+        const isEffectivelyLocked = hasPassword && !isTemporarilyUnlocked;
+        if (isEffectivelyLocked) {
             obj.content = '';
             obj.images = [];
             obj.checklist = [];
@@ -211,7 +240,12 @@ const updateNote = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Note updated successfully',
-            data: obj,
+            data: {
+                ...obj,
+                isLocked: hasPassword,
+                isUnlocked: isTemporarilyUnlocked,
+                unlockedUntil: obj.unlockedUntil ? new Date(obj.unlockedUntil).toISOString() : null,
+            },
         });
     }
     catch (error) {
@@ -326,19 +360,47 @@ exports.deleteNotes = deleteNotes;
 const lockNote = async (req, res) => {
     try {
         const { id } = req.params;
-        const { password, userId } = req.body;
-        if (!password || typeof password !== 'string' || password.trim().length < 4) {
-            res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
-            return;
-        }
+        const { password, userId, action } = req.body;
         const filterQuery = { _id: id };
         if (userId && typeof userId === 'string') {
             filterQuery.userId = userId.trim();
+        }
+        if (action === 'lock-now') {
+            const updated = await Note_1.Note.findOneAndUpdate(filterQuery, {
+                $set: {
+                    unlockedUntil: null,
+                },
+            }, { returnDocument: 'after' });
+            if (!updated) {
+                res.status(404).json({ success: false, message: 'Note not found' });
+                return;
+            }
+            const obj = updated.toJSON();
+            res.status(200).json({
+                success: true,
+                message: 'Note locked successfully',
+                data: {
+                    ...obj,
+                    isLocked: true,
+                    isUnlocked: false,
+                    unlockedUntil: null,
+                    content: '',
+                    images: [],
+                    checklist: [],
+                    audioUrl: null,
+                },
+            });
+            return;
+        }
+        if (!password || typeof password !== 'string' || password.trim().length < 4) {
+            res.status(400).json({ success: false, message: 'Password must be at least 4 characters' });
+            return;
         }
         const updated = await Note_1.Note.findOneAndUpdate(filterQuery, {
             $set: {
                 isLocked: true,
                 password: (0, security_1.hashNotePassword)(password.trim()),
+                unlockedUntil: null,
             },
         }, { returnDocument: 'after' });
         if (!updated) {
@@ -348,7 +410,16 @@ const lockNote = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Note locked successfully',
-            data: { id: updated.id, isLocked: true },
+            data: {
+                id: updated.id,
+                isLocked: true,
+                isUnlocked: false,
+                unlockedUntil: null,
+                content: '',
+                images: [],
+                checklist: [],
+                audioUrl: null,
+            },
         });
     }
     catch (error) {
@@ -386,12 +457,23 @@ const unlockNote = async (req, res) => {
             res.status(401).json({ success: false, message: 'Incorrect password' });
             return;
         }
-        // Password matches! Return full unmasked note
-        const obj = note.toJSON();
+        // 3-hour unlock window
+        const unlockedUntil = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        const updated = await Note_1.Note.findOneAndUpdate(filterQuery, {
+            $set: {
+                unlockedUntil,
+            },
+        }, { returnDocument: 'after' });
+        const obj = updated ? updated.toJSON() : note.toJSON();
         res.status(200).json({
             success: true,
-            message: 'Note unlocked successfully',
-            data: obj,
+            message: 'Note unlocked for 3 hours',
+            data: {
+                ...obj,
+                isLocked: true,
+                isUnlocked: true,
+                unlockedUntil: unlockedUntil.toISOString(),
+            },
         });
     }
     catch (error) {
@@ -427,6 +509,7 @@ const removeLock = async (req, res) => {
             $set: {
                 isLocked: false,
                 password: null,
+                unlockedUntil: null,
             },
         }, { returnDocument: 'after' });
         res.status(200).json({

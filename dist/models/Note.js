@@ -77,6 +77,7 @@ const NoteSchema = new mongoose_1.Schema({
     reminder: { type: Date, default: null },
     isLocked: { type: Boolean, default: false, index: true },
     password: { type: String, default: null },
+    unlockedUntil: { type: Date, default: null, index: true },
     userId: { type: mongoose_1.Schema.Types.Mixed, default: null, index: true },
 }, {
     timestamps: true,

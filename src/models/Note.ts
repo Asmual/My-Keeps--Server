@@ -33,6 +33,7 @@ export interface INote extends Document {
   reminder?: Date | null;
   isLocked: boolean;
   password?: string | null;
+  unlockedUntil?: Date | null;
   userId?: mongoose.Types.ObjectId | string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +86,7 @@ const NoteSchema = new Schema<INote>(
     reminder: { type: Date, default: null },
     isLocked: { type: Boolean, default: false, index: true },
     password: { type: String, default: null },
+    unlockedUntil: { type: Date, default: null, index: true },
     userId: { type: Schema.Types.Mixed, default: null, index: true },
   },
   {
