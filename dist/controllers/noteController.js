@@ -50,6 +50,11 @@ const getNotes = async (req, res) => {
             query.isTrashed = false;
             query.$or = [{ noteType: 'voice' }, { audioUrl: { $ne: null } }];
         }
+        else if (filter === 'reminders') {
+            query.isArchived = false;
+            query.isTrashed = false;
+            query.reminder = { $ne: null };
+        }
         else {
             query.isArchived = false;
             query.isTrashed = false;
@@ -175,7 +180,7 @@ const createNote = async (req, res) => {
             noteType: noteType || 'text',
             images: images || [],
             audioUrl: audioUrl || null,
-            reminder: reminder || null,
+            reminder: reminder ? new Date(reminder) : null,
             userId: userId.trim(),
             isLocked: locked,
             password: passwordHash,
@@ -213,6 +218,9 @@ const updateNote = async (req, res) => {
         delete updateData.isLocked;
         delete updateData.unlockedUntil;
         delete updateData.userId;
+        if (updateData.reminder !== undefined) {
+            updateData.reminder = updateData.reminder ? new Date(updateData.reminder) : null;
+        }
         const filterQuery = { _id: id };
         if (userId && typeof userId === 'string') {
             filterQuery.userId = userId.trim();
